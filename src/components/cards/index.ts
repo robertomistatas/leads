@@ -1,0 +1,6 @@
+export { BeneficiaryCard } from './BeneficiaryCard'
+export { ClientInfoCard } from './ClientInfoCard'
+export { CommercialTermsCard } from './CommercialTermsCard'
+export { ContractedPlanCard } from './ContractedPlanCard'
+export { SaleActionsCard } from './SaleActionsCard'
+export { SaleStepsCard } from './SaleStepsCard'
