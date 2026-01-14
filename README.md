@@ -1,5 +1,7 @@
 # Leads / Ventas — MisTatas / AMAIA
 
+[![Deploy to GitHub Pages](https://github.com/robertomistatas/leads/actions/workflows/deploy.yml/badge.svg)](https://github.com/robertomistatas/leads/actions/workflows/deploy.yml)
+
 SPA interna para gestión de Leads y Ventas con Firebase (Auth + Firestore), auditoría basada en eventos y UI operativa en español.
 
 - Frontend: React 18 + TypeScript (strict) + Vite
@@ -38,6 +40,11 @@ La app espera variables `VITE_*` (ver `.env.example`).
 - `VITE_FIREBASE_MEASUREMENT_ID` (opcional)
 
 Nota: al ser una SPA en GitHub Pages, la configuración web de Firebase no es secreta. La seguridad real se aplica con Firebase Auth + Firestore Security Rules.
+
+## Deploy (GitHub Pages)
+
+- URL: https://robertomistatas.github.io/leads/
+- El deploy se ejecuta automáticamente al hacer push a `main` (workflow: `.github/workflows/deploy.yml`).
 
 ## Arquitectura (resumen)
 
