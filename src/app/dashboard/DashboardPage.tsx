@@ -1,15 +1,26 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { useRecentEvents } from '../../hooks/useEvents'
 import { useClientsByIds, useSales } from '../../hooks/useSales'
 import type { SaleStatus } from '../../models/Sale'
+import type { Sale } from '../../models/Sale'
+import { getCloseSaleReadiness } from '../../services/sales.service'
+import { firestoreDb } from '../../services/firebase'
+import { collection, getDocs, limit, query, where } from 'firebase/firestore'
+import { saleErrorMessages } from '@/utils/domainErrorMessages'
 import { makeFolio } from '../../utils/folio'
 import { saleStatusLabel } from '../../utils/labels'
 
 export function DashboardPage() {
   const { sales, loading } = useSales()
   const { events: recentEvents } = useRecentEvents(500)
+
+  const [readinessLoading, setReadinessLoading] = useState(false)
+  const [readinessError, setReadinessError] = useState<string | null>(null)
+  const [readinessBySaleId, setReadinessBySaleId] = useState<
+    Record<string, ReturnType<typeof getCloseSaleReadiness>>
+  >({})
 
   const saleById = useMemo(() => new Map(sales.map((s) => [s.id, s])), [sales])
   const { clientsById } = useClientsByIds(useMemo(() => sales.map((s) => s.clientId), [sales]))
@@ -51,6 +62,96 @@ export function DashboardPage() {
 
   const mostSoldPlan = byPlan[0]?.[0] ?? '—'
 
+  const inProgressSales = useMemo(() => sales.filter((s) => s.status === 'in_progress'), [sales])
+
+  useEffect(() => {
+    let alive = true
+
+    async function compute() {
+      setReadinessError(null)
+      if (inProgressSales.length === 0) {
+        setReadinessBySaleId({})
+        setReadinessLoading(false)
+        return
+      }
+
+      setReadinessLoading(true)
+
+      try {
+        const next: Record<string, ReturnType<typeof getCloseSaleReadiness>> = {}
+        const benRef = collection(firestoreDb, 'beneficiaries')
+        const stepsRef = collection(firestoreDb, 'sale_steps')
+
+        for (const sale of inProgressSales) {
+          if (!alive) return
+
+          // Replicate the same underlying reads used by closeSale (read-only).
+          const benQ = query(benRef, where('saleId', '==', sale.id), limit(1))
+          const benSnap = await getDocs(benQ)
+          const beneficiaryExists = Boolean(benSnap.docs[0])
+
+          const contractQ = query(
+            stepsRef,
+            where('saleId', '==', sale.id),
+            where('type', '==', 'CONTRACT'),
+            limit(1),
+          )
+          const contractSnap = await getDocs(contractQ)
+          const contract = contractSnap.docs[0]?.data() as Record<string, unknown> | undefined
+          const contractSigned = contract?.status === 'SIGNED'
+
+          next[sale.id] = getCloseSaleReadiness({
+            sale: sale as unknown as Sale,
+            beneficiaryExists,
+            contractSigned,
+          })
+        }
+
+        if (!alive) return
+        setReadinessBySaleId(next)
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[DashboardPage] failed to compute close readiness', err)
+        if (!alive) return
+        setReadinessError('No se pudo calcular el estado de cierre. Intenta recargar.')
+        setReadinessBySaleId({})
+      } finally {
+        if (!alive) return
+        setReadinessLoading(false)
+      }
+    }
+
+    void compute()
+    return () => {
+      alive = false
+    }
+  }, [inProgressSales])
+
+  const executive = useMemo(() => {
+    let ready = 0
+    let blocked = 0
+    const primaryBlockersCount: Record<string, number> = {}
+
+    for (const s of inProgressSales) {
+      const readiness = readinessBySaleId[s.id]
+      if (!readiness) continue
+      if (readiness.canClose) {
+        ready += 1
+        continue
+      }
+      blocked += 1
+      const primary = readiness.blockers[0] ?? 'SALE_INCOMPLETE'
+      primaryBlockersCount[primary] = (primaryBlockersCount[primary] ?? 0) + 1
+    }
+
+    return {
+      inProgress: inProgressSales.length,
+      ready,
+      blocked,
+      byPrimaryBlocker: primaryBlockersCount as Record<string, number>,
+    }
+  }, [inProgressSales, readinessBySaleId])
+
   const activeAlertsCount = useMemo(() => {
     const now = Date.now()
     let count = 0
@@ -79,6 +180,50 @@ export function DashboardPage() {
         <div className="text-2xl font-semibold">Dashboard</div>
         <div className="text-sm text-slate-600">Métricas runtime (no persistidas)</div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="text-sm font-semibold">Dashboard Ejecutivo</div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">Ventas en progreso</div>
+              <div className="text-2xl font-semibold">{loading ? '…' : executive.inProgress}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">Listas para cerrar</div>
+              <div className="text-2xl font-semibold">{loading || readinessLoading ? '…' : executive.ready}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="text-xs text-slate-500">Bloqueadas</div>
+              <div className="text-2xl font-semibold">{loading || readinessLoading ? '…' : executive.blocked}</div>
+            </div>
+          </div>
+
+          {readinessError ? <div className="mt-3 text-sm text-slate-600">{readinessError}</div> : null}
+
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-medium text-slate-900">
+              Ventas bloqueadas: {loading || readinessLoading ? '…' : executive.blocked}
+            </div>
+            <div className="mt-2 text-xs text-slate-600 space-y-1">
+              <div>
+                • {loading || readinessLoading ? '…' : executive.byPrimaryBlocker.CONTRACT_NOT_SIGNED ?? 0} —{' '}
+                {saleErrorMessages.CONTRACT_NOT_SIGNED}
+              </div>
+              <div>
+                • {loading || readinessLoading ? '…' : executive.byPrimaryBlocker.BENEFICIARY_REQUIRED ?? 0} —{' '}
+                {saleErrorMessages.BENEFICIARY_REQUIRED}
+              </div>
+              <div>
+                • {loading || readinessLoading ? '…' : executive.byPrimaryBlocker.SALE_INCOMPLETE ?? 0} —{' '}
+                {saleErrorMessages.SALE_INCOMPLETE}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

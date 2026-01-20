@@ -192,6 +192,30 @@ export type CreateLeadInput = {
 	region?: string
 }
 
+export function getCloseSaleReadiness(params: {
+	sale: Sale
+	beneficiaryExists: boolean
+	contractSigned: boolean
+}): {
+	canClose: boolean
+	blockers: SaleDomainError[]
+} {
+	const { sale, beneficiaryExists, contractSigned } = params
+	const blockers: SaleDomainError[] = []
+
+	// Evaluate all rules in order and accumulate blockers.
+	if (!sale) blockers.push('SALE_NOT_FOUND')
+
+	if (!sale?.plan || !sale?.modality) blockers.push('SALE_INCOMPLETE')
+	if (!beneficiaryExists) blockers.push('BENEFICIARY_REQUIRED')
+	if (!contractSigned) blockers.push('CONTRACT_NOT_SIGNED')
+
+	return {
+		canClose: blockers.length === 0,
+		blockers,
+	}
+}
+
 export const salesService = {
 	listenSales: (cb: (sales: SaleView[]) => void, status?: SaleStatus): Unsubscribe => {
 		const salesRef = collection(firestoreDb, 'sales')

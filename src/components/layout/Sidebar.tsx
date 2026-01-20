@@ -3,6 +3,7 @@ import type { AppSection } from './AppShell'
 import { Button } from '../ui/button'
 import { authService } from '../../services/auth.service'
 import { useAlerts } from '../../hooks/useAlerts'
+import mistatasLogo from '../../img/mistatas2026.png'
 
 type Props = {
   section: AppSection
@@ -15,7 +16,7 @@ export function Sidebar({ section, onChangeSection }: Props) {
   return (
     <aside className="w-72 shrink-0 border-r border-slate-200 bg-white">
       <div className="p-6">
-        <div className="text-xs text-slate-500">MisTatas / AMAIA</div>
+        <img src={mistatasLogo} alt="Mistatas" className="h-11 w-auto object-contain" />
         <div className="text-lg font-semibold text-slate-900">Gestión Interna</div>
       </div>
 

@@ -10,7 +10,7 @@ export function Topbar({ title }: { title: string }) {
     <header className="sticky top-0 z-10 bg-slate-50/80 backdrop-blur border-b border-slate-200">
       <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
         <div className="flex-1 min-w-0">
-          <div className="text-2xl font-semibold truncate">{title}</div>
+			<div className="text-2xl font-semibold truncate">{title}</div>
         </div>
 
         <div className="hidden md:flex items-center gap-2 w-[360px]">
