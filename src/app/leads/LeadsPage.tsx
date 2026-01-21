@@ -13,7 +13,7 @@ import { SaleTimeline } from '../../components/timeline/SaleTimeline'
 import { makeFolio } from '../../utils/folio'
 import { saleStatusLabel } from '../../utils/labels'
 
-export function LeadsPage() {
+export function LeadsPage({ initialSaleId }: { initialSaleId?: string }) {
   const alerts = useAlerts()
   const { user } = useAuth()
   const { sales: leads, loading } = useSales('lead')
@@ -25,6 +25,11 @@ export function LeadsPage() {
 
   const [selectedSaleId, setSelectedSaleId] = useState<string | undefined>(undefined)
   const selectedLead = useMemo(() => leads.find((l) => l.id === selectedSaleId), [leads, selectedSaleId])
+
+  useEffect(() => {
+    if (!initialSaleId) return
+    setSelectedSaleId(initialSaleId)
+  }, [initialSaleId])
 
   const { clientsById } = useClientsByIds(useMemo(() => leads.map((l) => l.clientId), [leads]))
   const selectedClient = selectedLead ? clientsById[selectedLead.clientId] : undefined
@@ -88,6 +93,7 @@ export function LeadsPage() {
                 )
                 alerts.success('Lead creado')
                 setSelectedSaleId(saleId)
+				window.location.hash = `leads/${saleId}`
                 setFullName('')
                 setRut('')
                 setPhone('')
@@ -139,7 +145,10 @@ export function LeadsPage() {
                   <button
                     key={l.id}
                     type="button"
-                    onClick={() => setSelectedSaleId(l.id)}
+                    onClick={() => {
+                      setSelectedSaleId(l.id)
+                      window.location.hash = `leads/${l.id}`
+                    }}
                     className={
                       'w-full text-left rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400/40 ' +
                       (l.id === selectedSaleId

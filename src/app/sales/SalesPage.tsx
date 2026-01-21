@@ -11,7 +11,7 @@ import { computeRequiredStepTypes, salesService } from '../../services/sales.ser
 import { makeFolio } from '../../utils/folio'
 import { saleStatusLabel } from '../../utils/labels'
 
-export function SalesPage() {
+export function SalesPage({ initialSaleId }: { initialSaleId?: string }) {
   const alerts = useAlerts()
   const { user } = useAuth()
   const { sales, loading } = useSales('in_progress')
@@ -39,6 +39,11 @@ export function SalesPage() {
       serviceRegion: beneficiary?.region ?? selectedSale?.serviceRegion,
     })
   }, [selectedSaleId, user, beneficiary?.region, selectedSale?.serviceRegion])
+
+  useEffect(() => {
+    if (!initialSaleId) return
+    setSelectedSaleId(initialSaleId)
+  }, [initialSaleId])
 
   const shownAlertRef = useRef<Set<string>>(new Set())
   const runtime = useMemo(() => {
@@ -100,7 +105,10 @@ export function SalesPage() {
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => setSelectedSaleId(s.id)}
+                    onClick={() => {
+                      setSelectedSaleId(s.id)
+                      window.location.hash = `sales/${s.id}`
+                    }}
                     className={
                       'w-full text-left rounded-xl border px-3 py-2 ' +
                       (s.id === selectedSaleId

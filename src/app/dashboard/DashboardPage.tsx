@@ -8,9 +8,90 @@ import type { Sale } from '../../models/Sale'
 import { getCloseSaleReadiness } from '../../services/sales.service'
 import { firestoreDb } from '../../services/firebase'
 import { collection, getDocs, limit, query, where } from 'firebase/firestore'
-import { saleErrorMessages } from '@/utils/domainErrorMessages'
 import { makeFolio } from '../../utils/folio'
 import { saleStatusLabel } from '../../utils/labels'
+
+function endOfLocalDay(d: Date) {
+  const out = new Date(d)
+  out.setHours(23, 59, 59, 999)
+  return out
+}
+
+function addDays(d: Date, days: number) {
+  const out = new Date(d)
+  out.setDate(out.getDate() + days)
+  return out
+}
+
+function Sparkline({ values }: { values: number[] }) {
+  const width = 110
+  const height = 34
+  const paddingX = 2
+  const paddingY = 2
+
+  const safe = values.length > 0 ? values : [0]
+  const min = Math.min(...safe)
+  const max = Math.max(...safe)
+  const span = max - min
+  const denom = span === 0 ? 1 : span
+
+  const stepX = safe.length === 1 ? 0 : (width - paddingX * 2) / (safe.length - 1)
+  const points = safe.map((v, i) => {
+    const x = paddingX + i * stepX
+    const t = (v - min) / denom
+    const y = paddingY + (1 - t) * (height - paddingY * 2)
+    return { x, y }
+  })
+
+  const lineD = points
+    .map((p, idx) => (idx === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`))
+    .join(' ')
+  const areaD = `${lineD} L ${paddingX + (safe.length - 1) * stepX} ${height - paddingY} L ${paddingX} ${
+    height - paddingY
+  } Z`
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-8 w-28" aria-hidden="true">
+      <path d={areaD} fill="currentColor" opacity={0.12} />
+      <path d={lineD} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function navigateToSaleDetail(saleId: string, status: SaleStatus) {
+  // The app uses internal sections; use hash as a lightweight route.
+  if (status === 'lead') {
+    window.location.hash = `leads/${saleId}`
+    return
+  }
+  window.location.hash = `sales/${saleId}`
+}
+
+function ExecutiveKpiCard({
+  title,
+  value,
+  loading,
+  series,
+  accentClassName,
+}: {
+  title: string
+  value: number
+  loading: boolean
+  series: number[]
+  accentClassName: string
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex items-end justify-between gap-4">
+      <div className="min-w-0">
+        <div className="text-xs text-slate-500">{title}</div>
+        <div className="mt-1 text-3xl font-semibold text-slate-900">{loading ? '…' : value}</div>
+      </div>
+      <div className={accentClassName}>
+        <Sparkline values={series} />
+      </div>
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const { sales, loading } = useSales()
@@ -21,6 +102,9 @@ export function DashboardPage() {
   const [readinessBySaleId, setReadinessBySaleId] = useState<
     Record<string, ReturnType<typeof getCloseSaleReadiness>>
   >({})
+	const [closeFactsBySaleId, setCloseFactsBySaleId] = useState<
+		Record<string, { beneficiaryExists: boolean; contractStatus: string | undefined }>
+	>({})
 
   const saleById = useMemo(() => new Map(sales.map((s) => [s.id, s])), [sales])
   const { clientsById } = useClientsByIds(useMemo(() => sales.map((s) => s.clientId), [sales]))
@@ -79,6 +163,7 @@ export function DashboardPage() {
 
       try {
         const next: Record<string, ReturnType<typeof getCloseSaleReadiness>> = {}
+			const nextFacts: Record<string, { beneficiaryExists: boolean; contractStatus: string | undefined }> = {}
         const benRef = collection(firestoreDb, 'beneficiaries')
         const stepsRef = collection(firestoreDb, 'sale_steps')
 
@@ -99,6 +184,9 @@ export function DashboardPage() {
           const contractSnap = await getDocs(contractQ)
           const contract = contractSnap.docs[0]?.data() as Record<string, unknown> | undefined
           const contractSigned = contract?.status === 'SIGNED'
+			const contractStatus = contract?.status ? String(contract.status) : undefined
+
+			nextFacts[sale.id] = { beneficiaryExists, contractStatus }
 
           next[sale.id] = getCloseSaleReadiness({
             sale: sale as unknown as Sale,
@@ -109,12 +197,14 @@ export function DashboardPage() {
 
         if (!alive) return
         setReadinessBySaleId(next)
+			setCloseFactsBySaleId(nextFacts)
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error('[DashboardPage] failed to compute close readiness', err)
         if (!alive) return
         setReadinessError('No se pudo calcular el estado de cierre. Intenta recargar.')
         setReadinessBySaleId({})
+			setCloseFactsBySaleId({})
       } finally {
         if (!alive) return
         setReadinessLoading(false)
@@ -167,6 +257,160 @@ export function DashboardPage() {
     return count
   }, [sales, latestEventAtBySale])
 
+  const dayEnds = useMemo(() => {
+    const days = 7
+    const today = new Date()
+    const start = addDays(today, -(days - 1))
+    const out: Date[] = []
+    for (let i = 0; i < days; i += 1) out.push(endOfLocalDay(addDays(start, i)))
+    return out
+  }, [])
+
+  const eventsBySaleId = useMemo(() => {
+    const map = new Map<string, typeof recentEvents>()
+    for (const e of recentEvents) {
+      if (!e.saleId) continue
+      const list = map.get(e.saleId)
+      if (list) list.push(e)
+      else map.set(e.saleId, [e])
+    }
+    // Keep each list sorted desc by createdAt (already in recentEvents order, but be safe).
+    for (const [k, list] of map.entries()) {
+      list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      map.set(k, list)
+    }
+    return map
+  }, [recentEvents])
+
+  const statusEvents = useMemo(
+    () => recentEvents.filter((e) => e.entity === 'SALE' && e.field === 'status' && e.newValue),
+    [recentEvents],
+  )
+
+  const executiveTrends = useMemo(() => {
+    const msHour = 1000 * 60 * 60
+
+    const inProgressTrend = dayEnds.map((end) => {
+      let count = inProgressSales.length
+      for (const e of statusEvents) {
+        if (e.createdAt <= end) continue
+        if (e.newValue === 'in_progress') count -= 1
+        else if (e.previousValue === 'in_progress') count += 1
+      }
+      return Math.max(0, count)
+    })
+
+    function getSaleValueAtDayEnd(input: {
+      saleId: string
+      currentValue: string | undefined
+      entity: 'SALE' | 'STEP'
+      field: string
+      dayEnd: Date
+      commentEquals?: string
+    }) {
+      const list = eventsBySaleId.get(input.saleId) ?? []
+      let value = input.currentValue
+      for (const e of list) {
+        if (e.createdAt <= input.dayEnd) break
+        if (e.entity !== input.entity) continue
+        if (e.field !== input.field) continue
+        if (input.commentEquals && (e.comment ?? '') !== input.commentEquals) continue
+        value = e.previousValue
+      }
+      const s = (value ?? '').trim()
+      return s.length === 0 ? undefined : s
+    }
+
+    function beneficiaryExistsAtDayEnd(saleId: string, dayEnd: Date) {
+      const facts = closeFactsBySaleId[saleId]
+      if (!facts?.beneficiaryExists) return false
+      const list = eventsBySaleId.get(saleId) ?? []
+      const creation = list.find((e) => e.entity === 'BENEFICIARY' && (e.comment ?? '') === 'Creación de beneficiario')
+      if (!creation) return true
+      return creation.createdAt <= dayEnd
+    }
+
+    function contractSignedAtDayEnd(saleId: string, dayEnd: Date) {
+      const facts = closeFactsBySaleId[saleId]
+      const currentStatus = facts?.contractStatus
+      const statusAt = getSaleValueAtDayEnd({
+        saleId,
+        currentValue: currentStatus,
+        entity: 'STEP',
+        field: 'status',
+        dayEnd,
+        commentEquals: 'Paso CONTRACT',
+      })
+      return statusAt === 'SIGNED'
+    }
+
+    const readyTrend: number[] = []
+    const blockedTrend: number[] = []
+    const alertsTrend: number[] = []
+
+    for (const end of dayEnds) {
+      let ready = 0
+      let blocked = 0
+      let alerts = 0
+
+      for (const s of inProgressSales) {
+        const planAt = getSaleValueAtDayEnd({
+          saleId: s.id,
+          currentValue: s.plan ? String(s.plan) : undefined,
+          entity: 'SALE',
+          field: 'plan',
+          dayEnd: end,
+        })
+        const modalityAt = getSaleValueAtDayEnd({
+          saleId: s.id,
+          currentValue: s.modality ? String(s.modality) : undefined,
+          entity: 'SALE',
+          field: 'modality',
+          dayEnd: end,
+        })
+
+        const beneficiaryExists = beneficiaryExistsAtDayEnd(s.id, end)
+        const contractSigned = contractSignedAtDayEnd(s.id, end)
+
+        const readiness = getCloseSaleReadiness({
+          sale: ({ ...s, plan: planAt as any, modality: modalityAt as any } as unknown as Sale),
+          beneficiaryExists,
+          contractSigned,
+        })
+
+        if (readiness.canClose) ready += 1
+        else blocked += 1
+
+        // Active alerts approximation at that day end (>= 24h since last event at/before day end).
+        const list = eventsBySaleId.get(s.id) ?? []
+        let lastAt: Date | undefined
+        for (const e of list) {
+          if (e.createdAt <= end) {
+            lastAt = e.createdAt
+            break
+          }
+        }
+        const fallback = s.createdAt
+        const base = lastAt ?? fallback
+        if (base) {
+          const hours = (end.getTime() - base.getTime()) / msHour
+          if (hours >= 24) alerts += 1
+        }
+      }
+
+      readyTrend.push(ready)
+      blockedTrend.push(blocked)
+      alertsTrend.push(alerts)
+    }
+
+    return {
+      inProgressTrend,
+      readyTrend,
+      blockedTrend,
+      alertsTrend,
+    }
+  }, [dayEnds, inProgressSales, statusEvents, eventsBySaleId, closeFactsBySaleId])
+
   const lastConverted = useMemo(() => {
     const list = recentEvents
       .filter((e) => e.entity === 'SALE' && e.field === 'status' && e.newValue === 'in_progress')
@@ -186,39 +430,57 @@ export function DashboardPage() {
           <div className="text-sm font-semibold">Dashboard Ejecutivo</div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-xs text-slate-500">Ventas en progreso</div>
-              <div className="text-2xl font-semibold">{loading ? '…' : executive.inProgress}</div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-xs text-slate-500">Listas para cerrar</div>
-              <div className="text-2xl font-semibold">{loading || readinessLoading ? '…' : executive.ready}</div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-xs text-slate-500">Bloqueadas</div>
-              <div className="text-2xl font-semibold">{loading || readinessLoading ? '…' : executive.blocked}</div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <ExecutiveKpiCard
+              title="Ventas en progreso"
+              value={executive.inProgress}
+              loading={loading}
+              series={executiveTrends.inProgressTrend}
+              accentClassName="text-sky-600"
+            />
+            <ExecutiveKpiCard
+              title="Bloqueadas"
+              value={executive.blocked}
+              loading={loading || readinessLoading}
+              series={executiveTrends.blockedTrend}
+              accentClassName="text-rose-500"
+            />
+            <ExecutiveKpiCard
+              title="Listas para cerrar"
+              value={executive.ready}
+              loading={loading || readinessLoading}
+              series={executiveTrends.readyTrend}
+              accentClassName="text-emerald-600"
+            />
+            <ExecutiveKpiCard
+              title="Alertas activas (aprox.)"
+              value={activeAlertsCount}
+              loading={loading}
+              series={executiveTrends.alertsTrend}
+              accentClassName="text-amber-600"
+            />
           </div>
 
           {readinessError ? <div className="mt-3 text-sm text-slate-600">{readinessError}</div> : null}
 
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-medium text-slate-900">
-              Ventas bloqueadas: {loading || readinessLoading ? '…' : executive.blocked}
+              Ventas que no pueden cerrarse aún: {loading || readinessLoading ? '…' : executive.blocked}
             </div>
+            <div className="mt-1 text-xs text-slate-600">
+              Estas ventas no pueden cerrarse todavía porque falta completar pasos administrativos clave.
+            </div>
+
+            <div className="mt-3 text-xs font-medium text-slate-700">Principales causas:</div>
             <div className="mt-2 text-xs text-slate-600 space-y-1">
               <div>
-                • {loading || readinessLoading ? '…' : executive.byPrimaryBlocker.CONTRACT_NOT_SIGNED ?? 0} —{' '}
-                {saleErrorMessages.CONTRACT_NOT_SIGNED}
+                • Contrato pendiente de firma ({loading || readinessLoading ? '…' : executive.byPrimaryBlocker.CONTRACT_NOT_SIGNED ?? 0} ventas)
               </div>
               <div>
-                • {loading || readinessLoading ? '…' : executive.byPrimaryBlocker.BENEFICIARY_REQUIRED ?? 0} —{' '}
-                {saleErrorMessages.BENEFICIARY_REQUIRED}
+                • Beneficiario no registrado ({loading || readinessLoading ? '…' : executive.byPrimaryBlocker.BENEFICIARY_REQUIRED ?? 0} ventas)
               </div>
               <div>
-                • {loading || readinessLoading ? '…' : executive.byPrimaryBlocker.SALE_INCOMPLETE ?? 0} —{' '}
-                {saleErrorMessages.SALE_INCOMPLETE}
+                • Datos obligatorios incompletos ({loading || readinessLoading ? '…' : executive.byPrimaryBlocker.SALE_INCOMPLETE ?? 0} ventas)
               </div>
             </div>
           </div>
@@ -304,14 +566,31 @@ export function DashboardPage() {
                 {filteredSales.slice(0, 50).map((s) => {
                   const last = latestEventAtBySale.get(s.id)
                   const clientName = clientsById[s.clientId]?.fullName ?? 'Cliente sin nombre'
+                  const canNavigate = s.status === 'in_progress' || s.status === 'lead'
                   return (
-                    <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                    <button
+                      key={s.id}
+                      type="button"
+                      disabled={!canNavigate}
+                      onClick={() => navigateToSaleDetail(s.id, s.status)}
+                      className={
+                        'w-full text-left rounded-xl border bg-white p-3 ' +
+                        (canNavigate
+                          ? 'cursor-pointer border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors'
+                          : 'cursor-default border-slate-200 opacity-80')
+                      }
+                      title={
+                        canNavigate
+                          ? 'Abrir detalle de la venta'
+                          : 'Detalle disponible solo para Leads o Ventas en progreso'
+                      }
+                    >
                       <div className="text-sm font-medium text-slate-900">{clientName}</div>
                       <div className="text-xs text-slate-600">
                         {makeFolio('Venta', s.id) ?? 'Venta'} · Estado: {saleStatusLabel(s.status)} · Plan: {s.plan ?? '—'} · Modalidad: {s.modality ?? '—'}
                       </div>
                       <div className="text-xs text-slate-500">Último evento: {last ? last.toLocaleString() : '—'}</div>
-                    </div>
+                    </button>
                   )
                 })}
               </div>
@@ -329,7 +608,19 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-2">
                 {lastConverted.map((e) => (
-                  <div key={e.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <button
+                    key={e.id}
+                    type="button"
+                    disabled={!e.saleId}
+                    onClick={() => (e.saleId ? navigateToSaleDetail(e.saleId, 'in_progress') : undefined)}
+                    className={
+                      'w-full text-left rounded-xl border bg-white p-3 ' +
+                      (e.saleId
+                        ? 'cursor-pointer border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors'
+                        : 'cursor-default border-slate-200 opacity-80')
+                    }
+                    title={e.saleId ? 'Abrir detalle de la venta' : 'Venta no disponible'}
+                  >
                     <div className="text-sm font-medium text-slate-900">
                       {(() => {
                         const sale = e.saleId ? saleById.get(e.saleId) : undefined
@@ -340,7 +631,7 @@ export function DashboardPage() {
                     <div className="text-xs text-slate-600">{e.createdAt.toLocaleString()}</div>
                     {e.saleId ? <div className="text-xs text-slate-600">{makeFolio('Venta', e.saleId) ?? 'Venta'}</div> : null}
                     {e.comment ? <div className="text-xs text-slate-500">{e.comment}</div> : null}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
