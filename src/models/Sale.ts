@@ -1,5 +1,9 @@
 export type SaleStatus = 'lead' | 'in_progress' | 'closed' | 'archived'
 
+export type PaymentStatus = 'PENDING' | 'SENT' | 'READY'
+
+export type PaymentSentVia = 'PAYMENT_LINK' | 'PAYMENT_BUTTON' | 'AMAIA_PAYMENT'
+
 export interface Sale {
 	id: string
 	clientId: string
@@ -14,6 +18,10 @@ export interface Sale {
 
 	hasIncompleteData: boolean // calculado
 	hasAlerts: boolean // calculado
+
+	// Pago (campos opcionales para compatibilidad con ventas existentes)
+	paymentStatus?: PaymentStatus
+	paymentSentVia?: PaymentSentVia
 
 	createdAt: Date
 	closedAt?: Date

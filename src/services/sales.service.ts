@@ -34,6 +34,8 @@ export type SaleView = {
 	plan?: Sale['plan']
 	modality?: Sale['modality']
 	serviceRegion?: string
+	paymentStatus?: Sale['paymentStatus']
+	paymentSentVia?: Sale['paymentSentVia']
 	createdAt?: Date
 	closedAt?: Date
 	archivedAt?: Date
@@ -77,6 +79,8 @@ function toSaleView(id: string, data: DocumentData): SaleView | null {
 		plan,
 		modality,
 		serviceRegion: data.serviceRegion ? String(data.serviceRegion) : undefined,
+		paymentStatus: data.paymentStatus as Sale['paymentStatus'] | undefined,
+		paymentSentVia: data.paymentSentVia as Sale['paymentSentVia'] | undefined,
 		createdAt: coerceToDate(data.createdAt),
 		closedAt: coerceToDate(data.closedAt),
 		archivedAt: coerceToDate(data.archivedAt),
@@ -717,8 +721,9 @@ export const salesService = {
 		type: SaleStepType
 		status?: SaleStepStatus
 		method?: SaleStep['method']
+		paymentSentVia?: Sale['paymentSentVia']
 	}) => {
-		const { saleId, actorUserId, type, status, method } = input
+		const { saleId, actorUserId, type, status, method, paymentSentVia } = input
 		const stepsRef = collection(firestoreDb, 'sale_steps')
 		const q = query(stepsRef, where('saleId', '==', saleId), where('type', '==', type), limit(1))
 		const existing = await getDocs(q)
@@ -735,6 +740,23 @@ export const salesService = {
 		if (method !== undefined) updates.method = method
 
 		await updateDoc(doc(stepsRef, first.id), cleanUndefined(updates))
+
+		// Persistencia adicional para Pago (sin romper ventas existentes).
+		// Mapea estado del paso a estado de pago en la venta:
+		// - PENDING -> PENDING
+		// - SENT -> SENT
+		// - DONE -> READY
+		if (type === 'PAYMENT' && status) {
+			const salesRef = collection(firestoreDb, 'sales')
+			const saleRef = doc(salesRef, saleId)
+			const saleUpdates: Record<string, unknown> = {
+				paymentStatus: status === 'DONE' ? 'READY' : status,
+			}
+			if (status === 'SENT' && paymentSentVia) {
+				saleUpdates.paymentSentVia = paymentSentVia
+			}
+			await updateDoc(saleRef, cleanUndefined(saleUpdates))
+		}
 
 		if (status && current.status !== status) {
 			await eventsService.createEvent({
