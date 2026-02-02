@@ -165,7 +165,7 @@ export function SalesPage({ initialSaleId }: { initialSaleId?: string }) {
               <ContractedPlanCard sale={selectedSale} actorUserId={user.uid} />
               {client ? <ClientInfoCard saleId={selectedSale.id} actorUserId={user.uid} client={client} /> : null}
               <BeneficiaryCard saleId={selectedSale.id} actorUserId={user.uid} beneficiary={beneficiary} />
-              <CommercialTermsCard saleId={selectedSale.id} actorUserId={user.uid} terms={terms} />
+              <CommercialTermsCard sale={selectedSale} saleId={selectedSale.id} actorUserId={user.uid} terms={terms} />
               <SaleStepsCard sale={selectedSale} saleId={selectedSale.id} actorUserId={user.uid} steps={steps} requiredTypes={requiredTypes} />
               <SaleChecklist steps={steps} requiredTypes={requiredTypes} />
               <SaleTimeline events={events} />

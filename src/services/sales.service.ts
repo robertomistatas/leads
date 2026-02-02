@@ -18,7 +18,17 @@ import { firestoreDb } from './firebase'
 import type { Beneficiary } from '../models/Beneficiary'
 import type { Client } from '../models/Client'
 import type { CommercialTerms } from '../models/CommercialTerms'
-import type { Sale, SaleStatus } from '../models/Sale'
+import type {
+	BillingSummary,
+	FinalPricing,
+	PlanSnapshot,
+	PricingDelta,
+	PricingPaymentMethod,
+	PricingSummary,
+	Sale,
+	SaleStatus,
+	SuggestedPricing,
+} from '../models/Sale'
 import type { SaleStep, SaleStepStatus, SaleStepType } from '../models/SaleStep'
 import type { DomainResult, SaleDomainError } from '../models/domainResult'
 import { eventsService } from './events.service'
@@ -33,6 +43,14 @@ export type SaleView = {
 	status: SaleStatus
 	plan?: Sale['plan']
 	modality?: Sale['modality']
+	planId?: string
+	planSnapshot?: PlanSnapshot
+	paymentMethod?: PricingPaymentMethod
+	pricingSummary?: PricingSummary
+	billing?: BillingSummary
+	suggestedPricing?: SuggestedPricing
+	finalPricing?: FinalPricing
+	pricingDelta?: PricingDelta
 	serviceRegion?: string
 	paymentStatus?: Sale['paymentStatus']
 	paymentSentVia?: Sale['paymentSentVia']
@@ -71,6 +89,96 @@ function toSaleView(id: string, data: DocumentData): SaleView | null {
 
 	const plan = data.plan as Sale['plan'] | undefined
 	const modality = data.modality as Sale['modality'] | undefined
+	const planId = data.planId ? String(data.planId) : undefined
+	const paymentMethod = data.paymentMethod as PricingPaymentMethod | undefined
+
+	const planSnapshotRaw = data.planSnapshot as Record<string, unknown> | undefined
+	const planSnapshot: PlanSnapshot | undefined = planSnapshotRaw
+		? {
+			id: String(planSnapshotRaw.id ?? ''),
+			code: String(planSnapshotRaw.code ?? ''),
+			name: String(planSnapshotRaw.name ?? ''),
+			pricing: {
+				monthlySubscriptionClp: Number((planSnapshotRaw as any).pricing?.monthlySubscriptionClp ?? 0),
+				activationFeeClp: Number((planSnapshotRaw as any).pricing?.activationFeeClp ?? 0),
+				monthsBilled: Number((planSnapshotRaw as any).pricing?.monthsBilled ?? 12),
+				waiveActivationFee: Boolean((planSnapshotRaw as any).pricing?.waiveActivationFee ?? false),
+			},
+			teleassistance: (planSnapshotRaw as any).teleassistance
+				? {
+					enabled: Boolean((planSnapshotRaw as any).teleassistance?.enabled ?? false),
+					monthlyFeeClp: Number((planSnapshotRaw as any).teleassistance?.monthlyFeeClp ?? 0),
+				}
+				: undefined,
+			annualCreditCard: Boolean(planSnapshotRaw.annualCreditCard ?? false),
+			active: Boolean(planSnapshotRaw.active ?? true),
+			updatedAt: coerceToDate(planSnapshotRaw.updatedAt),
+		}
+		: undefined
+
+	const pricingSummaryRaw = data.pricingSummary as Record<string, unknown> | undefined
+	const pricingSummary: PricingSummary | undefined = pricingSummaryRaw
+		? {
+			paymentMethod: (pricingSummaryRaw.paymentMethod as PricingPaymentMethod) ?? paymentMethod ?? 'MONTHLY',
+			monthsCharged: Number(pricingSummaryRaw.monthsCharged ?? 0),
+			monthlySubscriptionClp: Number(pricingSummaryRaw.monthlySubscriptionClp ?? 0),
+			teleassistanceMonthlyFeeClp: Number((pricingSummaryRaw as any).teleassistanceMonthlyFeeClp ?? 0),
+			setupFeeClp: Number(pricingSummaryRaw.setupFeeClp ?? 0),
+			setupFeeCharged: Number(pricingSummaryRaw.setupFeeCharged ?? 0),
+			subscriptionCharged: Number(pricingSummaryRaw.subscriptionCharged ?? 0),
+			teleassistanceCharged: Number((pricingSummaryRaw as any).teleassistanceCharged ?? 0),
+			baseAmount: Number(pricingSummaryRaw.baseAmount ?? 0),
+			discountPercentage: Number(pricingSummaryRaw.discountPercentage ?? 0),
+			discountAmount: Number(pricingSummaryRaw.discountAmount ?? 0),
+			finalAmount: Number(pricingSummaryRaw.finalAmount ?? 0),
+		}
+		: undefined
+
+	const billingRaw = data.billing as Record<string, unknown> | undefined
+	const billing: BillingSummary | undefined = billingRaw
+		? {
+			monthsCharged: Number(billingRaw.monthsCharged ?? 0),
+			setupFeeCharged: Number(billingRaw.setupFeeCharged ?? 0),
+		}
+		: undefined
+
+	const suggestedPricingRaw = data.suggestedPricing as Record<string, unknown> | undefined
+	const suggestedPricingSnapshotAt = suggestedPricingRaw ? (suggestedPricingRaw as any).snapshotAt : undefined
+	const suggestedPricing: SuggestedPricing | undefined =
+		suggestedPricingRaw && suggestedPricingSnapshotAt
+			? {
+				monthlyFee: Number((suggestedPricingRaw as any).monthlyFee ?? 0),
+				setupFee: Number((suggestedPricingRaw as any).setupFee ?? 0),
+				teleassistanceAddon:
+					(suggestedPricingRaw as any).teleassistanceAddon === undefined
+						? undefined
+						: Number((suggestedPricingRaw as any).teleassistanceAddon ?? 0),
+				sourcePlanId: String((suggestedPricingRaw as any).sourcePlanId ?? ''),
+				snapshotAt: suggestedPricingSnapshotAt as any,
+			}
+			: undefined
+
+	const finalPricingRaw = data.finalPricing as Record<string, unknown> | undefined
+	const finalPricing: FinalPricing | undefined = finalPricingRaw
+		? {
+			monthlyFee: Number((finalPricingRaw as any).monthlyFee ?? 0),
+			setupFee: Number((finalPricingRaw as any).setupFee ?? 0),
+			teleassistanceIncluded: Boolean((finalPricingRaw as any).teleassistanceIncluded ?? false),
+			discountApplied:
+				(finalPricingRaw as any).discountApplied === undefined
+					? undefined
+					: Number((finalPricingRaw as any).discountApplied ?? 0),
+			notes: (finalPricingRaw as any).notes ? String((finalPricingRaw as any).notes) : undefined,
+		}
+		: undefined
+
+	const pricingDeltaRaw = data.pricingDelta as Record<string, unknown> | undefined
+	const pricingDelta: PricingDelta | undefined = pricingDeltaRaw
+		? {
+			amountDifference: Number((pricingDeltaRaw as any).amountDifference ?? 0),
+			percentDifference: Number((pricingDeltaRaw as any).percentDifference ?? 0),
+		}
+		: undefined
 
 	const view: SaleView = {
 		id,
@@ -78,6 +186,14 @@ function toSaleView(id: string, data: DocumentData): SaleView | null {
 		status,
 		plan,
 		modality,
+		planId,
+		planSnapshot: planSnapshot?.id ? planSnapshot : undefined,
+		paymentMethod,
+		pricingSummary,
+		billing,
+		suggestedPricing: suggestedPricing?.sourcePlanId ? suggestedPricing : undefined,
+		finalPricing,
+		pricingDelta,
 		serviceRegion: data.serviceRegion ? String(data.serviceRegion) : undefined,
 		paymentStatus: data.paymentStatus as Sale['paymentStatus'] | undefined,
 		paymentSentVia: data.paymentSentVia as Sale['paymentSentVia'] | undefined,
@@ -586,6 +702,56 @@ export const salesService = {
 				modality: 'modality',
 			},
 		})
+	},
+
+	updateSalePlanReferences: async (input: {
+		saleId: string
+		planId?: string
+		planSnapshot?: PlanSnapshot
+	}) => {
+		const { saleId, planId, planSnapshot } = input
+		const saleRef = doc(collection(firestoreDb, 'sales'), saleId)
+		await updateDoc(saleRef, cleanUndefined({ planId, planSnapshot }))
+	},
+
+	updateSalePricing: async (input: {
+		saleId: string
+		planId: string
+		planSnapshot: PlanSnapshot
+		paymentMethod: PricingPaymentMethod
+		pricingSummary: PricingSummary
+		billing: BillingSummary
+	}) => {
+		const { saleId, planId, planSnapshot, paymentMethod, pricingSummary, billing } = input
+		const saleRef = doc(collection(firestoreDb, 'sales'), saleId)
+		await updateDoc(
+			saleRef,
+			cleanUndefined({
+				planId,
+				planSnapshot,
+				paymentMethod,
+				pricingSummary,
+				billing,
+			}),
+		)
+	},
+
+	updateSaleHybridPricing: async (input: {
+		saleId: string
+		suggestedPricing?: SuggestedPricing
+		finalPricing?: FinalPricing
+		pricingDelta?: PricingDelta
+	}) => {
+		const { saleId, suggestedPricing, finalPricing, pricingDelta } = input
+		const saleRef = doc(collection(firestoreDb, 'sales'), saleId)
+		await updateDoc(
+			saleRef,
+			cleanUndefined({
+				suggestedPricing,
+				finalPricing,
+				pricingDelta,
+			}),
+		)
 	},
 
 	closeSale: async (input: {

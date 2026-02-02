@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { SaleView } from '../../services/sales.service'
 import { salesService } from '../../services/sales.service'
 import { useAlerts } from '../../hooks/useAlerts'
+import { usePlans } from '../../hooks/usePlans'
 import { Button } from '../ui/button'
 import { Card, CardContent, CardHeader } from '../ui/card'
 
@@ -10,8 +11,11 @@ type Props = {
   actorUserId: string
 }
 
-const PLAN_OPTIONS = ['APP', 'STARTER', 'MAYOR', 'GPS_TRACKER', 'FULL', 'FLEXIBLE'] as const
 const MODALITY_OPTIONS = ['CON_TELEASISTENCIA', 'SIN_TELEASISTENCIA'] as const
+
+function modalityLabel(modality: (typeof MODALITY_OPTIONS)[number]) {
+  return modality === 'CON_TELEASISTENCIA' ? 'Con teleasistencia' : 'Sin teleasistencia'
+}
 
 function storedPlanToUi(plan: SaleView['plan'] | undefined) {
   // Compatibilidad: en el modelo existente el equivalente histórico es MIXTO.
@@ -19,40 +23,75 @@ function storedPlanToUi(plan: SaleView['plan'] | undefined) {
   return plan === 'MIXTO' ? 'FLEXIBLE' : String(plan)
 }
 
-function uiPlanToStored(planUi: string) {
-  if (!planUi) return undefined
-  return planUi === 'FLEXIBLE' ? ('MIXTO' as const) : (planUi as any)
+function planCodeToStoredSalePlan(code: string | undefined) {
+	if (!code) return undefined
+	// Compatibilidad: el equivalente histórico es MIXTO.
+	if (code === 'FLEXIBLE') return 'MIXTO' as const
+	return code as any
 }
 
 export function ContractedPlanCard({ sale, actorUserId }: Props) {
   const alerts = useAlerts()
+  const { plans, loading } = usePlans()
   const [saving, setSaving] = useState(false)
+
+  const inferredPlanId = useMemo(() => {
+		if (sale.planId) return sale.planId
+		const code = storedPlanToUi(sale.plan)
+		if (!code) return ''
+		return plans.find((p) => p.code === code)?.id ?? ''
+  }, [sale.planId, sale.plan, plans])
+
   const [form, setForm] = useState({
-    plan: storedPlanToUi(sale.plan),
+    planId: sale.planId ?? '',
     modality: sale.modality ?? '',
   })
 
   useEffect(() => {
     setForm({
-      plan: storedPlanToUi(sale.plan),
+			planId: sale.planId ?? inferredPlanId,
       modality: sale.modality ?? '',
     })
-  }, [sale.id, sale.plan, sale.modality])
+  }, [sale.id, sale.planId, sale.plan, sale.modality, inferredPlanId])
 
   const changed = useMemo(() => {
-    const nextPlanStored = uiPlanToStored(form.plan)
+		const selectedPlan = plans.find((p) => p.id === form.planId)
+    const nextPlanStored = planCodeToStoredSalePlan(selectedPlan?.code)
     const nextModality = form.modality || undefined
-    return (sale.plan ?? undefined) !== nextPlanStored || (sale.modality ?? undefined) !== nextModality
-  }, [form.plan, form.modality, sale.plan, sale.modality])
+		return (
+			(sale.planId ?? '') !== (form.planId ?? '') ||
+			(sale.plan ?? undefined) !== nextPlanStored ||
+			(sale.modality ?? undefined) !== nextModality
+		)
+  }, [form.planId, form.modality, sale.planId, sale.plan, sale.modality, plans])
 
   async function onSave() {
     try {
       setSaving(true)
+      const selectedPlan = plans.find((p) => p.id === form.planId)
+      if (!selectedPlan) {
+        alerts.error('Selecciona un plan válido para guardar')
+        return
+      }
       await salesService.updateSalePlanAndModality({
         saleId: sale.id,
         actorUserId,
-        plan: uiPlanToStored(form.plan),
+        plan: planCodeToStoredSalePlan(selectedPlan.code),
         modality: (form.modality || undefined) as any,
+      })
+      await salesService.updateSalePlanReferences({
+        saleId: sale.id,
+        planId: selectedPlan.id,
+        planSnapshot: {
+          id: selectedPlan.id,
+          code: selectedPlan.code,
+          name: selectedPlan.name,
+          pricing: selectedPlan.pricing,
+          teleassistance: selectedPlan.teleassistance,
+          annualCreditCard: selectedPlan.annualCreditCard,
+          active: selectedPlan.active,
+          updatedAt: selectedPlan.updatedAt,
+        },
       })
       alerts.success('Plan contratado actualizado')
     } catch {
@@ -81,15 +120,18 @@ export function ContractedPlanCard({ sale, actorUserId }: Props) {
             <div className="text-xs text-slate-500">Plan</div>
             <select
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-              value={form.plan}
-              onChange={(e) => setForm((s) => ({ ...s, plan: e.target.value }))}
+					value={form.planId}
+					onChange={(e) => setForm((s) => ({ ...s, planId: e.target.value }))}
             >
-              <option value="">Selecciona…</option>
-              {PLAN_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
+					<option value="">{loading ? 'Cargando…' : 'Selecciona…'}</option>
+					{plans
+						.slice()
+						.sort((a, b) => a.code.localeCompare(b.code, 'es'))
+						.map((p) => (
+							<option key={p.id} value={p.id}>
+								{p.code} — {p.name}{p.active ? '' : ' (inactivo)'}
+							</option>
+						))}
             </select>
           </div>
 
@@ -103,7 +145,7 @@ export function ContractedPlanCard({ sale, actorUserId }: Props) {
               <option value="">Selecciona…</option>
               {MODALITY_OPTIONS.map((m) => (
                 <option key={m} value={m}>
-                  {m}
+							{modalityLabel(m)}
                 </option>
               ))}
             </select>
