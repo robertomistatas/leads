@@ -1,4 +1,4 @@
-import { LayoutDashboard, Megaphone, BadgeDollarSign, LogOut } from 'lucide-react'
+import { LayoutDashboard, Megaphone, BadgeDollarSign, Calculator, LogOut } from 'lucide-react'
 import type { AppSection } from './AppShell'
 import { Button } from '../ui/button'
 import { authService } from '../../services/auth.service'
@@ -38,6 +38,12 @@ export function Sidebar({ section, onChangeSection }: Props) {
           icon={<BadgeDollarSign className="h-4 w-4" />}
           label="Ventas"
           onClick={() => onChangeSection('sales')}
+        />
+        <SidebarItem
+          active={section === 'values'}
+          icon={<Calculator className="h-4 w-4" />}
+          label="Valores"
+          onClick={() => onChangeSection('values')}
         />
       </nav>
 
