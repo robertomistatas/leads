@@ -1,8 +1,9 @@
 export type AuditAction = 'CREATE' | 'UPDATE' | 'ACTIVATE' | 'DEACTIVATE'
 
-export type AuditEntityType = 'PLAN'
+export type AuditEntityType = 'PLAN' | 'USER'
 
 export type AuditActor = {
+	uid?: string
 	userId?: string
 	email?: string
 	role?: string

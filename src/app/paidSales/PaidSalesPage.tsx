@@ -69,7 +69,7 @@ export function PaidSalesPage() {
 					</CardHeader>
 					<CardContent>
 						<div className="text-sm text-slate-600">
-							Este módulo es solo para Finanzas / Administración.
+							Este módulo está disponible para usuarios activos con rol autorizado.
 						</div>
 					</CardContent>
 				</Card>

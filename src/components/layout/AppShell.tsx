@@ -7,8 +7,10 @@ import { SalesPage } from '../../app/sales/SalesPage'
 import { ClientsPage } from '../../app/clients/ClientsPage'
 import { ValuesPage } from '../../app/values/ValuesPage'
 import { PaidSalesPage } from '../../app/paidSales/PaidSalesPage'
+import { SettingsPage } from '../../app/settings/SettingsPage'
+import { useAuth } from '../../hooks/useAuth'
 
-export type AppSection = 'dashboard' | 'leads' | 'sales' | 'values' | 'clients' | 'paid-sales'
+export type AppSection = 'dashboard' | 'leads' | 'sales' | 'values' | 'clients' | 'paid-sales' | 'settings'
 
 function parseHashRoute(): { section: AppSection; saleId?: string } {
   const raw = window.location.hash.replace(/^#/, '').trim()
@@ -16,13 +18,14 @@ function parseHashRoute(): { section: AppSection; saleId?: string } {
   const parts = raw.split('/').filter(Boolean)
   const section = parts[0] as AppSection
   const saleId = parts[1]
-  if (section === 'dashboard' || section === 'leads' || section === 'sales' || section === 'values' || section === 'clients' || section === 'paid-sales') {
+  if (section === 'dashboard' || section === 'leads' || section === 'sales' || section === 'values' || section === 'clients' || section === 'paid-sales' || section === 'settings') {
     return { section, saleId }
   }
   return { section: 'dashboard' }
 }
 
 export function AppShell() {
+  const { isSuperAdmin } = useAuth()
   const [route, setRoute] = useState(() => parseHashRoute())
 
   useEffect(() => {
@@ -30,6 +33,13 @@ export function AppShell() {
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  useEffect(() => {
+    if (route.section === 'settings' && !isSuperAdmin) {
+      window.location.hash = 'dashboard'
+      setRoute({ section: 'dashboard' })
+    }
+  }, [route.section, isSuperAdmin])
 
   const { title, content } = useMemo(() => {
     switch (route.section) {
@@ -45,6 +55,8 @@ export function AppShell() {
         return { title: 'Valores', content: <ValuesPage /> }
       case 'paid-sales':
         return { title: 'Ventas Pagadas', content: <PaidSalesPage /> }
+      case 'settings':
+        return { title: 'Configuración', content: <SettingsPage /> }
       default:
         return { title: '', content: null }
     }

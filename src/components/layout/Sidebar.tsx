@@ -1,9 +1,10 @@
-import { LayoutDashboard, Megaphone, BadgeDollarSign, Calculator, FileText, LogOut } from 'lucide-react'
+import { LayoutDashboard, Megaphone, BadgeDollarSign, Calculator, FileText, Settings, LogOut } from 'lucide-react'
 import type { AppSection } from './AppShell'
 import { Button } from '../ui/button'
 import { authService } from '../../services/auth.service'
 import { useAlerts } from '../../hooks/useAlerts'
 import { useUserProfile } from '../../hooks/useUserProfile'
+import { useAuth } from '../../hooks/useAuth'
 import mistatasLogo from '../../img/mistatas2026.png'
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
 export function Sidebar({ section, onChangeSection }: Props) {
   const alerts = useAlerts()
   const { canAccessPaidSales } = useUserProfile()
+  const { isSuperAdmin } = useAuth()
 
   return (
     <aside className="w-72 shrink-0 border-r border-slate-200 bg-white">
@@ -57,6 +59,15 @@ export function Sidebar({ section, onChangeSection }: Props) {
           label="Valores"
           onClick={() => onChangeSection('values')}
         />
+
+        {isSuperAdmin ? (
+          <SidebarItem
+            active={section === 'settings'}
+            icon={<Settings className="h-4 w-4" />}
+            label="Configuración"
+            onClick={() => onChangeSection('settings')}
+          />
+        ) : null}
       </nav>
 
       <div className="p-4 mt-6">

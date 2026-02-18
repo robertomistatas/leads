@@ -15,7 +15,7 @@ const defaultFirebaseConfig = {
   measurementId: 'G-2BFX3BN8PK',
 }
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string | undefined) ?? defaultFirebaseConfig.apiKey,
   authDomain:
     (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined) ?? defaultFirebaseConfig.authDomain,
