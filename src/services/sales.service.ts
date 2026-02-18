@@ -2,6 +2,7 @@ import {
 	collection,
 	doc,
 	documentId,
+	deleteField,
 	getDoc,
 	getDocs,
 	limit,
@@ -54,6 +55,19 @@ export type SaleView = {
 	serviceRegion?: string
 	paymentStatus?: Sale['paymentStatus']
 	paymentSentVia?: Sale['paymentSentVia']
+	// Contabilidad (nuevo): registro explícito de pago efectivo
+	payment_status?: 'PAID' | 'PENDING' | 'FAILED'
+	payment?: {
+		status?: 'PAID' | 'PENDING'
+		billing_model?: 'ANNUAL_CC' | 'MONTHLY'
+		amount_paid?: number
+		currency?: 'CLP'
+		paid_at?: import('firebase/firestore').Timestamp
+		provider?: 'FLOW' | 'TRANSFER' | 'CASH' | 'OTHER'
+		notes?: string
+		updated_at?: import('firebase/firestore').Timestamp
+		updated_by?: string
+	}
 	createdAt?: Date
 	closedAt?: Date
 	archivedAt?: Date
@@ -197,6 +211,8 @@ function toSaleView(id: string, data: DocumentData): SaleView | null {
 		serviceRegion: data.serviceRegion ? String(data.serviceRegion) : undefined,
 		paymentStatus: data.paymentStatus as Sale['paymentStatus'] | undefined,
 		paymentSentVia: data.paymentSentVia as Sale['paymentSentVia'] | undefined,
+		payment_status: (data as any).payment_status as any,
+		payment: (data as any).payment as any,
 		createdAt: coerceToDate(data.createdAt),
 		closedAt: coerceToDate(data.closedAt),
 		archivedAt: coerceToDate(data.archivedAt),
@@ -752,6 +768,62 @@ export const salesService = {
 				pricingDelta,
 			}),
 		)
+	},
+
+	updateSaleAccountingPayment: async (input: {
+		saleId: string
+		actorUserId: string
+		payment: {
+			status: 'PAID' | 'PENDING'
+			billing_model?: 'ANNUAL_CC' | 'MONTHLY'
+			amount_paid?: number
+			currency?: 'CLP'
+			paid_at?: import('firebase/firestore').Timestamp
+			provider?: 'FLOW' | 'TRANSFER' | 'CASH' | 'OTHER'
+			notes?: string
+			updated_at?: any
+			updated_by?: string
+		}
+	}) => {
+		const { saleId, actorUserId, payment } = input
+		const salesRef = collection(firestoreDb, 'sales')
+		const saleRef = doc(salesRef, saleId)
+		const snap = await getDoc(saleRef)
+		if (!snap.exists()) throw new Error('sale_not_found')
+		const current = snap.data() as Record<string, unknown>
+
+		const payment_status = payment.status
+		const billing_model = payment.billing_model
+		const amountValue = Number(payment.amount_paid ?? 0)
+		const amountPeriod = billing_model === 'ANNUAL_CC' ? 'ANNUAL' : billing_model === 'MONTHLY' ? 'MONTHLY' : undefined
+
+		// Keep paid-sales module compatible: align top-level fields used for filtering/order.
+		const patch: Record<string, unknown> = {
+			payment,
+			payment_status,
+			paid_at: payment.status === 'PAID' ? payment.paid_at : deleteField(),
+			billing_model: billing_model ?? deleteField(),
+			amount:
+				payment.status === 'PAID' && billing_model && amountPeriod
+					? { value: amountValue, currency: 'CLP', period: amountPeriod }
+					: deleteField(),
+		}
+
+		await updateWithEvents<Record<string, unknown>>({
+			entity: 'SALE',
+			docRef: saleRef as unknown as import('firebase/firestore').DocumentReference<Record<string, unknown>>,
+			current,
+			patch,
+			actorUserId,
+			saleId,
+			fieldMap: {
+				payment: 'payment',
+				payment_status: 'payment_status',
+				paid_at: 'paid_at',
+				billing_model: 'billing_model',
+				amount: 'amount',
+			},
+		})
 	},
 
 	closeSale: async (input: {

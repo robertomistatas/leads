@@ -170,7 +170,7 @@ export function CommercialTermsCard({ sale, saleId, actorUserId, terms }: Props)
 
 	return (
 		<Card>
-			<CardHeader>
+			<CardHeader className="p-4">
 				<div className="flex items-center justify-between gap-3">
 					<div>
 						<div className="text-sm font-semibold">Términos comerciales</div>
@@ -181,7 +181,7 @@ export function CommercialTermsCard({ sale, saleId, actorUserId, terms }: Props)
 					</Button>
 				</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="p-4">
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 					<div className="space-y-2">
 						<Label>Plan</Label>

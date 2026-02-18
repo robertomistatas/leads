@@ -41,10 +41,10 @@ export function SaleChecklist({
 
   return (
     <Card>
-      <CardHeader>
+			<CardHeader className="p-4">
         <div className="text-sm font-semibold">Lista de verificación</div>
       </CardHeader>
-      <CardContent>
+			<CardContent className="p-4">
         <div className="space-y-2">
           {ordered.map((type) => {
             const s = byType.get(type)

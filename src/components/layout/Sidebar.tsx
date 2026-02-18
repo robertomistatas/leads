@@ -1,8 +1,9 @@
-import { LayoutDashboard, Megaphone, BadgeDollarSign, Calculator, LogOut } from 'lucide-react'
+import { LayoutDashboard, Megaphone, BadgeDollarSign, Calculator, FileText, LogOut } from 'lucide-react'
 import type { AppSection } from './AppShell'
 import { Button } from '../ui/button'
 import { authService } from '../../services/auth.service'
 import { useAlerts } from '../../hooks/useAlerts'
+import { useUserProfile } from '../../hooks/useUserProfile'
 import mistatasLogo from '../../img/mistatas2026.png'
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 export function Sidebar({ section, onChangeSection }: Props) {
   const alerts = useAlerts()
+  const { canAccessPaidSales } = useUserProfile()
 
   return (
     <aside className="w-72 shrink-0 border-r border-slate-200 bg-white">
@@ -39,6 +41,16 @@ export function Sidebar({ section, onChangeSection }: Props) {
           label="Ventas"
           onClick={() => onChangeSection('sales')}
         />
+
+        {canAccessPaidSales ? (
+          <SidebarItem
+            active={section === 'paid-sales'}
+            icon={<FileText className="h-4 w-4" />}
+            label="Ventas Pagadas"
+            onClick={() => onChangeSection('paid-sales')}
+          />
+        ) : null}
+
         <SidebarItem
           active={section === 'values'}
           icon={<Calculator className="h-4 w-4" />}

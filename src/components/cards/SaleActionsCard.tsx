@@ -12,9 +12,10 @@ type Props = {
 	steps: SaleStepView[]
 	beneficiary: BeneficiaryView | null
 	actorUserId: string
+	mode?: 'card' | 'inline'
 }
 
-export function SaleActionsCard({ sale, steps, beneficiary, actorUserId }: Props) {
+export function SaleActionsCard({ sale, steps, beneficiary, actorUserId, mode = 'card' }: Props) {
 	const alerts = useAlerts()
 	const contractSigned = steps.find((s) => s.type === 'CONTRACT')?.status === 'SIGNED'
 	const beneficiaryExists = Boolean(beneficiary)
@@ -78,54 +79,67 @@ export function SaleActionsCard({ sale, steps, beneficiary, actorUserId }: Props
 		}
 	}
 
+	const content = (
+		<>
+			{!readiness.canClose ? (
+				<div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
+					<div className="flex items-start gap-2">
+						<div className="mt-0.5 text-slate-700">
+							<StatusIcon kind="blocked" />
+						</div>
+						<div>
+							<div className="font-medium">Esta venta no puede cerrarse todavía</div>
+							<div className="mt-1 text-xs text-slate-600">Falta completar:</div>
+							<ul className="mt-2 space-y-1">
+								{readiness.blockers.map((blocker) => (
+									<li key={blocker} className="flex items-start gap-2 text-xs text-slate-700">
+										<span className="mt-0.5 text-slate-500" aria-hidden="true">
+											<StatusIcon kind="item" />
+										</span>
+										<span>{saleErrorMessages[blocker]}</span>
+									</li>
+								))}
+							</ul>
+						</div>
+					</div>
+				</div>
+			) : (
+				<div className="mb-3 rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-800">
+					<div className="flex items-center gap-2">
+						<div className="text-slate-700">
+							<StatusIcon kind="ready" />
+						</div>
+						<div className="font-medium">Esta venta está lista para cerrarse</div>
+					</div>
+				</div>
+			)}
+
+			<div className="flex flex-wrap items-center gap-2">
+				<Button variant="default" onClick={onClose}>
+					Cerrar venta
+				</Button>
+				<Button variant="secondary" disabled={!canArchive} onClick={onArchive}>
+					Archivar
+				</Button>
+			</div>
+		</>
+	)
+
+	if (mode === 'inline') {
+		return (
+			<div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+				<div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones</div>
+				<div className="mt-3">{content}</div>
+			</div>
+		)
+	}
+
 	return (
 		<Card>
-			<CardHeader>
+			<CardHeader className="p-4">
 				<div className="text-sm font-semibold">Acciones</div>
 			</CardHeader>
-			<CardContent>
-				{!readiness.canClose ? (
-					<div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
-						<div className="flex items-start gap-2">
-							<div className="mt-0.5 text-slate-700">
-								<StatusIcon kind="blocked" />
-							</div>
-							<div>
-								<div className="font-medium">Esta venta no puede cerrarse todavía</div>
-								<div className="mt-1 text-xs text-slate-600">Falta completar:</div>
-								<ul className="mt-2 space-y-1">
-									{readiness.blockers.map((blocker) => (
-										<li key={blocker} className="flex items-start gap-2 text-xs text-slate-700">
-											<span className="mt-0.5 text-slate-500" aria-hidden="true">
-												<StatusIcon kind="item" />
-											</span>
-											<span>{saleErrorMessages[blocker]}</span>
-										</li>
-									))}
-								</ul>
-							</div>
-						</div>
-					</div>
-				) : (
-					<div className="mb-3 rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-800">
-						<div className="flex items-center gap-2">
-							<div className="text-slate-700">
-								<StatusIcon kind="ready" />
-							</div>
-							<div className="font-medium">Esta venta está lista para cerrarse</div>
-						</div>
-					</div>
-				)}
-
-				<div className="flex flex-wrap items-center gap-2">
-					<Button variant="default" onClick={onClose}>
-						Cerrar venta
-					</Button>
-					<Button variant="secondary" disabled={!canArchive} onClick={onArchive}>
-						Archivar
-					</Button>
-				</div>
-			</CardContent>
+			<CardContent className="p-4">{content}</CardContent>
 		</Card>
 	)
 }

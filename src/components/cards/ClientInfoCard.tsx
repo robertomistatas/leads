@@ -79,7 +79,7 @@ export function ClientInfoCard({ saleId, actorUserId, client }: Props) {
 
 	return (
 		<Card>
-			<CardHeader>
+			<CardHeader className="p-4">
 				<div className="flex items-center justify-between gap-3">
 					<div>
 						<div className="text-sm font-semibold">Información general (Cliente)</div>
@@ -90,7 +90,7 @@ export function ClientInfoCard({ saleId, actorUserId, client }: Props) {
 					</Button>
 				</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="p-4">
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 					<div className="space-y-2">
 						<Label>Nombre completo</Label>

@@ -6,8 +6,9 @@ import { LeadsPage } from '../../app/leads/LeadsPage'
 import { SalesPage } from '../../app/sales/SalesPage'
 import { ClientsPage } from '../../app/clients/ClientsPage'
 import { ValuesPage } from '../../app/values/ValuesPage'
+import { PaidSalesPage } from '../../app/paidSales/PaidSalesPage'
 
-export type AppSection = 'dashboard' | 'leads' | 'sales' | 'values' | 'clients'
+export type AppSection = 'dashboard' | 'leads' | 'sales' | 'values' | 'clients' | 'paid-sales'
 
 function parseHashRoute(): { section: AppSection; saleId?: string } {
   const raw = window.location.hash.replace(/^#/, '').trim()
@@ -15,7 +16,7 @@ function parseHashRoute(): { section: AppSection; saleId?: string } {
   const parts = raw.split('/').filter(Boolean)
   const section = parts[0] as AppSection
   const saleId = parts[1]
-  if (section === 'dashboard' || section === 'leads' || section === 'sales' || section === 'values' || section === 'clients') {
+  if (section === 'dashboard' || section === 'leads' || section === 'sales' || section === 'values' || section === 'clients' || section === 'paid-sales') {
     return { section, saleId }
   }
   return { section: 'dashboard' }
@@ -42,6 +43,8 @@ export function AppShell() {
         return { title: 'Clientes', content: <ClientsPage /> }
       case 'values':
         return { title: 'Valores', content: <ValuesPage /> }
+      case 'paid-sales':
+        return { title: 'Ventas Pagadas', content: <PaidSalesPage /> }
       default:
         return { title: '', content: null }
     }

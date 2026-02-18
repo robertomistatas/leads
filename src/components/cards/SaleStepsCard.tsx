@@ -126,10 +126,10 @@ export function SaleStepsCard({ sale, saleId, actorUserId, steps, requiredTypes 
 
 	return (
 		<Card>
-			<CardHeader>
+			<CardHeader className="p-4">
 				<div className="text-sm font-semibold">Operación (Pasos)</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="p-4">
 				<div className="space-y-3">
 					{required.map((type) => {
 						const current = getStep(steps, type)

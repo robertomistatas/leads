@@ -42,10 +42,10 @@ function fieldLabel(field: string) {
 export function SaleTimeline({ events }: { events: EventView[] }) {
   return (
     <Card>
-      <CardHeader>
+			<CardHeader className="p-4">
         <div className="text-sm font-semibold">Historial</div>
       </CardHeader>
-      <CardContent>
+			<CardContent className="p-4">
         {events.length === 0 ? (
           <div className="text-sm text-slate-600">Sin historial aún.</div>
         ) : (

@@ -146,6 +146,14 @@ Archivo: `src/models/Client.ts`
 - `rut?` deseable y único
 - `phone?`, `email?`, `address?`, `profession?`, `region?`
 
+---
+
+## Roles (acceso)
+
+Algunas pantallas internas pueden restringirse por rol (ej. módulos contables).
+
+- `superadmin`: **bypass total**. Debe ver todos los módulos y rutas, independiente de listas de roles permitidos.
+
 ### Beneficiary
 Archivo: `src/models/Beneficiary.ts`
 

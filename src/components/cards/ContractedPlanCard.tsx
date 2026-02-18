@@ -103,7 +103,7 @@ export function ContractedPlanCard({ sale, actorUserId }: Props) {
 
   return (
     <Card>
-      <CardHeader>
+			<CardHeader className="p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold">Plan contratado</div>
@@ -114,7 +114,7 @@ export function ContractedPlanCard({ sale, actorUserId }: Props) {
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+			<CardContent className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <div className="text-xs text-slate-500">Plan</div>
